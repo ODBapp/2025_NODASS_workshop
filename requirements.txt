@@ -2,8 +2,8 @@ basemap==2.0.0
 EMD_signal==1.6.4
 matplotlib==3.10.3
 numpy==2.3.1
-pandas==2.3.0
-Requests==2.32.4
+pandas==2.2.2
+Requests==2.32.3
 scipy==1.16.0
 seaborn==0.13.2
 statsmodels==0.14.4
