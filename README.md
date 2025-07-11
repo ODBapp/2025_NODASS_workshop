@@ -38,7 +38,7 @@ ODB 於 NODASS 工作坊使用的課程講義與程式碼 (2025-07-16 ~ 2025-07-
 
 - 海洋學門資料庫 Ocean Data Bank (ODB): https://www.odb.ntu.edu.tw/  
 - 國家海洋資料庫及共享平台 NODASS, NAMR: https://nodass.namr.gov.tw/  
-- 中央氣象署開放資料平臺之資料擷取API: https://opendata.cwa.gov.tw/dist/opendata-swagger.html  
+- 中央氣象署開放資料平臺之資料擷取 API: https://opendata.cwa.gov.tw/dist/opendata-swagger.html  
 
 > **Note**
 > - 本工作坊中使用的浮標資料由國海院（NAMR）提供，僅供課程使用。若需正式使用，請逕向國海院或中央氣象署（CWA）申請取得。
