@@ -13,6 +13,9 @@ Lectures and codebase for 2025 NODASS Workshop (2025-07-16 ~ 2025-07-18)
     ├── *lecture PDFs*
 └── src/
     ├── *codebase for each lecture*
+    ├── bio/
+    ├── geo/
+    ├── mhw/
     ├── timeseries/
 ```
 
@@ -27,3 +30,4 @@ Lectures and codebase for 2025 NODASS Workshop (2025-07-16 ~ 2025-07-18)
     CWA API: https://opendata.cwa.gov.tw/dist/opendata-swagger.html
 
   *Buoy data provided from NAMR (國海院) are used only for this training workshop. Please acquire the data from NAMR or CWA (中央氣象署) directly.*
+  *The dataset 台灣深海魚類多樣性的調查研究  used in the biology lecture, is provided by NAMR (國海院) and can be accessed through NODASS.*
