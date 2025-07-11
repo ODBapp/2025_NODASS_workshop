@@ -29,9 +29,9 @@ ODB 於 NODASS 工作坊使用的課程講義與程式碼 (2025-07-16 ~ 2025-07-
 - [Colab 連結](https://colab.research.google.com/github/ODBapp/2025_NODASS_workshop/blob/main/src/odb.ipynb)
 - `requirements.txt` 說明
   - 若是在本機執行程式碼，請先安裝相依套件：
-   ```bash
+    ```bash
         pip install -r requirements.txt
-    ```
+     ```
   - 若使用的是 Google Colab，則不需要手動安裝套件，Colab 會自動處理所有相依項目。
 
 ### 📊 資料來源
