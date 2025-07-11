@@ -23,6 +23,8 @@ Lectures and codebase for 2025 NODASS Workshop (2025-07-16 ~ 2025-07-18)
 
  [工作坊官網](https://sites.google.com/view/nodassbigdata/index)
 
+ [Colab 連結](https://colab.research.google.com/github/ODBapp/2025_NODASS_workshop/blob/main/src/odb.ipynb)
+
 ### Data source
 
     Ocean Data Bank (ODB): https://www.odb.ntu.edu.tw/
