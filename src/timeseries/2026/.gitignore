@@ -1,0 +1,9 @@
+# uv virtual env (built locally via `uv sync`)
+.venv/
+
+# dev-only figure captures from running the .py scripts headless
+figs/
+
+# python caches
+__pycache__/
+*.pyc
