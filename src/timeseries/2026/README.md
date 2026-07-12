@@ -45,14 +45,15 @@ uv run python 01_basics_stl.py   # 跑任一段（會用 plt.show() 顯示圖）
 - **資料抓取「線上優先、失敗用本機快取」**：課堂網路不穩也能跑（NOAA Niño3.4、ODB MHW API、浮標、霍亂等）。本機快取在 `data/`。
 
 ### Colab 用法（給學員）
-在 Colab 把對應的 `.py`（程式）與 `.md`（說明）合併成教學 notebook 即可；Colab 已預載大部分套件，cartopy/EMD-signal 視需要 `!pip install`。圖上文字是英文（Colab 預設字型無中文），中文說明在 markdown。
+課堂 notebook `timeseries2026.ipynb` 已由 A/B/C 三個 `.py` 依序組裝好，上傳 Colab 即可用；記得一併上傳 `ts_utils.py`（線上抓資料失敗時另需 `data/` 快取）。Colab 已預載大部分套件，cartopy/EMD-signal 視需要 `!pip install`。圖上文字是英文（Colab 預設字型無中文），中文說明在 markdown。
 
 ---
 
 ## 檔案格式約定
 
 - `.py` 用 `# %%` / `# %% [markdown]`（jupytext「percent」格式）分格，方便一格對應 notebook 一個 cell。
-- 中文教學敘事獨立放在 `narrative/*.md`，標題與程式分段一一對應；講師再手動合併成 `.ipynb`。
+- 中文教學敘事獨立放在 `narrative/*.md`，標題與程式分段一一對應。
+- 課堂 notebook `timeseries2026.ipynb` 由 `uv run python build_notebook.py` 從 01/02/03 三個 `.py` 依序組裝（markdown 格 → markdown cell、程式格 → code cell，一格對一格不合併）；改了 `.py` 後重跑即可重新產生（notebook 上的手動微調會被覆蓋）。
 - **圖上文字一律英文**（matplotlib 在 Colab 無 CJK 字型，中文會變方塊）；中文在 `.md` 與程式註解。
 
 ---
