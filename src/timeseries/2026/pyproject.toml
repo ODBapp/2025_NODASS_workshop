@@ -5,11 +5,18 @@ requires-python = ">=3.13"
 dependencies = [
     "cartopy>=0.24",
     "emd-signal>=1.6",
-    "matplotlib>=3.9",
+    # <3.11: cartopy 0.25 Gridliner 在 mpl 3.11 的 tight bbox 會算出 nan，
+    # 導致 Jupyter inline 圖只剩 colorbar (cartopy 修復後可解除)
+    "matplotlib>=3.9,<3.11",
     "numpy>=2.1",
     "pandas>=2.2",
     "requests>=2.32",
     "scipy>=1.14",
     "seaborn>=0.13",
     "statsmodels>=0.14",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
 ]
