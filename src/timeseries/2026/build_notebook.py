@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 SOURCES = ["01_basics_stl.py", "02_enso_events.py", "03_buoy_upwelling.py"]
-OUTPUT = HERE / "timeseries2026.ipynb"
+OUTPUT = HERE / "build_timeseries2026.ipynb"
 
 MARKER = re.compile(r"^#\s*%%(.*)$")   # `# %%` 或 `# %% [markdown]`（可帶標題）
 
