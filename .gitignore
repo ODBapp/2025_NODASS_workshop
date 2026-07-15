@@ -209,3 +209,5 @@ __marimo__/
 
 **/tmp
 
+# CWA/NAMR raw data would not be uploaded
+**/rawdata

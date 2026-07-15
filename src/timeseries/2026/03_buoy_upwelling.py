@@ -89,6 +89,107 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
+# ## C3.5 熱身：用「已知答案」的模擬序列，先搞懂落後互相關
+# C4 要對真實資料算「**落後互相關 (lagged cross-correlation)**」。在那之前，先重用 A1 的模擬函數
+# 自己造**一對**序列——因為延遲幾個月、方向為何**都是我們自己設定的**，才能檢驗這個方法讀不讀得出來
+# （和 A1「先用模擬驗證 STL」是同一個精神）。
+#
+# 設定（模仿湧升的物理）：
+# - **Driver X**＝驅動者（想成湧升指數）：直接重用 `ts.make_synthetic_series`（趨勢＋季節＋噪音）。
+# - **Response Y**＝反應者（想成 SST 距平）：對 **3 個月前**的 X 反應、**方向相反**（X 高 → Y 低），
+#   再加上 Y 自己的噪音。
+
+# %%
+# 兩個「已知的正確答案」—— 待會要用互相關把它們找回來
+LAG_TRUE = 3      # Y 比 X 慢 3 個月反應
+COUPLING = -0.8   # 方向相反：X 高 → 3 個月後 Y 低（模仿 湧升風 → 降溫）
+
+sim2 = ts.make_synthetic_series(n=120, slope=0.04, season_amp=2.0, noise=0.5)  # 重用 A1
+driver = sim2["y"].rename("driver")                     # X：驅動者（像湧升指數）
+
+rng = np.random.default_rng(2027)
+response = (COUPLING * driver.shift(LAG_TRUE)           # 對「3 個月前的 X」反應
+            + 0.5 * rng.standard_normal(len(driver))    # 再加 Y 自己的噪音
+            ).rename("response")
+
+fig, ax = plt.subplots(figsize=(12, 3.5))
+ax.plot(driver.index, driver, color="tab:blue")
+ax.set_ylabel("Driver X", color="tab:blue"); ax.tick_params(axis="y", labelcolor="tab:blue")
+ax2 = ax.twinx()
+ax2.plot(response.index, response, color="tab:orange")
+ax2.set_ylabel("Response Y", color="tab:orange"); ax2.tick_params(axis="y", labelcolor="tab:orange")
+ax.set_title(f"Synthetic pair:  Y(t) = {COUPLING} * X(t-{LAG_TRUE}) + noise   (true lag = {LAG_TRUE} months)")
+fig.tight_layout()
+plt.show()
+# 眼睛先看：橘線 (Y) 的谷，總是跟在藍線 (X) 的峰後面約 3 格——這就是待會要「量」出來的延遲
+
+# %% [markdown]
+# ### 「落後相關」其實就是：搬一搬，再算相關
+# 把 Y 整條往回搬 `lag` 個月（讓「X」對齊「lag 個月後的 Y」），算一個普通的相關係數 r；
+# 每個 lag 都做一次、比較哪個 lag 的 **|r| 最大**——這就是 `ts.lagged_xcorr()` 做的全部事情，
+# 沒有更多魔法。先手動掃 0～6 個月做給你看（`#` 越長 = |r| 越大）：
+
+# %%
+# 「落後相關」＝ 把 Y 往回搬 lag 個月、對齊、算普通的 Pearson r —— 如此而已
+for lag in range(0, 7):
+    shifted = response.shift(-lag)               # 對齊「lag 個月後的 Y」
+    m = driver.notna() & shifted.notna()         # 兩邊都有值的月份才算
+    r = driver[m].corr(shifted[m])
+    print(f"lag=+{lag} 月  r = {r:+.2f}  {'#' * int(abs(r) * 20)}")
+
+# %% [markdown]
+# ### 陷阱：季節會製造「到處都相關」的假象
+# 上面掃出 lag=+3 最強（r≈−0.94），看起來成功了？**別急。**
+# X 和 Y 都帶著強季節，而任何兩條有季節的序列，每隔一個週期（12 個月）就會「自動」對齊一次——
+# 高相關可以完全來自共同的季節，跟真正的因果耦合無關。
+#
+# 把 lag 掃寬到 ±20 個月就會現形（下圖左）：除了 +3 之外，**−9、+15 的相關幾乎一樣強**。
+# 光看原始序列，你分不出哪一根才是真的延遲。
+#
+# 解法是 A 段的老朋友：先用 **STL 把季節和趨勢拿掉、只留殘差**，再算互相關（下圖右）——
+# 假峰消失，只剩 +3 一根乾淨的負峰。
+
+# %%
+# 重用 A 段的 STL：把季節+趨勢拿掉、只留殘差，再算一次互相關來對照
+drv_resid = STL(driver, period=12, robust=True).fit().resid
+rsp_resid = STL(response.dropna(), period=12, robust=True).fit().resid
+
+lags_raw, r_raw, _, best_raw = ts.lagged_xcorr(driver, response, max_lag=20)
+lags_res, r_res, _, best_res = ts.lagged_xcorr(drv_resid, rsp_resid, max_lag=20)
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 3.8), sharey=True)
+for ax, (lg, rr, bl, ttl) in zip(axes, [
+        (lags_raw, r_raw, best_raw, "Raw series (season & trend still inside)"),
+        (lags_res, r_res, best_res, "STL residuals (season & trend removed)")]):
+    ax.stem(lg, rr, basefmt="k-")
+    ax.axhline(0, color="gray", lw=0.6)
+    ax.axvline(LAG_TRUE, color="green", ls=":", lw=1.5, label=f"true lag = +{LAG_TRUE}")
+    ax.axvline(bl, color="red", ls="--", lw=1,
+               label=f"best lag = {bl:+d},  r = {rr[list(lg).index(bl)]:.2f}")
+    ax.set_xlabel("Lag (months):  X leads Y  →")
+    ax.set_title(ttl)
+    ax.legend(fontsize=8)
+axes[0].set_ylabel("Correlation r")
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ### 對照表：這個熱身 ↔ C4 的真實案例
+#
+# | 熱身（模擬） | C4（真實資料） |
+# |---|---|
+# | Driver X（的 STL 殘差） | 湧升指數 UI（的 STL 殘差） |
+# | Response Y | SST 距平 |
+# | true lag：我們自己設 +3 個月 | 未知——互相關就是用來「估」它 |
+# | 方向相反（COUPLING < 0） | 湧升 → 降溫，也預期**負**相關 |
+#
+# 兩個誠實提醒：
+# 1. 殘差版的 r≈−0.5，比我們設定的耦合 −0.8 弱——因為兩條序列各自的噪音還在（本來就該在）。
+#    所以待會 C4 看到 r≈−0.33 不要驚訝：**真實資料裡的「強訊號」就長這樣**。
+# 2. 原始序列的 −0.94 雖然大，但它和 −9、+15 的假峰難分真假——**大的 r 不等於可信的 r**。
+#    先去掉可預期的部分（季節、趨勢），才能明確指認真正的延遲。
+
+# %% [markdown]
 # ## C4. 沿用論文方法、用浮標驗證 (Huang et al. 2021)
 # 論文用 CFSv2 風 + Himawari-8 衛星 SST，主結果是「湧升風天數↔衛星湧升天數 r=0.96」，
 # 並指出「湧升訊號比風事件落後幾天」。這裡**沿用論文的 UI 公式 (β=18° 北段)**，
