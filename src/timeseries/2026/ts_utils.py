@@ -23,10 +23,22 @@ import numpy as np
 import pandas as pd
 import requests
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+# 資料放在 src/timeseries/data（與 2026/ 同層的上一層），2026 與舊版 notebook 共用同一份。
+# __file__ = src/timeseries/2026/ts_utils.py → .parent = 2026/ → .parent.parent = timeseries/
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+EXAMPLES_DIR = DATA_DIR / "examples"   # 課堂用的靜態範例檔放這裡
 
 NOAA_NINO34_URL = "https://psl.noaa.gov/data/timeseries/month/data/nino34.long.anom.data"
 ODB_MHW_API = "https://eco.odb.ntu.edu.tw/api/mhw"
+
+
+def _save_cache(df: pd.DataFrame, cache: Path, index=True) -> None:
+    """把線上抓到的資料寫成快取。目錄不存在就建；寫檔失敗只警告、不影響回傳資料。"""
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(cache, index=index)
+    except Exception as exc:  # noqa: BLE001
+        warnings.warn(f"快取寫入失敗 ({exc})，但線上資料已取得，不影響本次結果")
 
 
 # ---------------------------------------------------------------------------
@@ -61,10 +73,11 @@ def load_noaa_nino34(start="1950", end="2025", timeout=20) -> pd.DataFrame:
         resp = requests.get(NOAA_NINO34_URL, timeout=timeout)
         resp.raise_for_status()
         df = _parse_noaa_nino34(resp.text)
-        df.to_csv(cache)  # 更新快取
     except Exception as exc:  # noqa: BLE001 — 課堂用，任何網路錯誤都退回快取
         warnings.warn(f"NOAA 線上抓取失敗 ({exc})，改用本機快取 {cache.name}")
         df = pd.read_csv(cache, index_col=0, parse_dates=True)
+    else:
+        _save_cache(df, cache)  # 只有線上成功才更新快取；存檔失敗不影響已取得的資料
 
     y0, y1 = int(str(start)[:4]), int(str(end)[:4])
     return df.loc[f"{y0}":f"{y1}"]
@@ -75,14 +88,14 @@ def load_noaa_nino34(start="1950", end="2025", timeout=20) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 def load_nino34_sst() -> pd.Series:
     """Niño 3.4 區域月平均「原始」海表溫 (含季節循環)。index=date。"""
-    df = pd.read_csv(DATA_DIR / "nino34_sst_1982-2024.csv",
+    df = pd.read_csv(EXAMPLES_DIR / "nino34_sst_1982-2024.csv",
                      index_col=0, parse_dates=True)
     return df["sst"]
 
 
 def load_nino34_anomaly_odb() -> pd.Series:
     """Niño 3.4 區域月平均 SST 距平 (來自 ODB MHW API)。index=date。"""
-    df = pd.read_csv(DATA_DIR / "nino34_mean_1982-2024.csv",
+    df = pd.read_csv(EXAMPLES_DIR / "nino34_mean_1982-2024.csv",
                      index_col=0, parse_dates=True)
     return df.iloc[:, 0].rename("sst_anomaly")
 
@@ -134,16 +147,17 @@ def load_enso_map(date="2015-12") -> pd.DataFrame:
         east = fetch_mhw_data(-179.999, lat0, -60, lat1, start, end)
         df = pd.concat([west, east], ignore_index=True)
         df = df[["lon", "lat", "sst_anomaly"]]   # 只留繪圖需要的欄位，快取較小
-        df.to_csv(cache, index=False)
     except Exception as exc:  # noqa: BLE001
         warnings.warn(f"ODB API 抓取失敗 ({exc})，改用本機快取 {cache.name}")
         df = pd.read_csv(cache)
+    else:
+        _save_cache(df, cache, index=False)  # 只有線上成功才更新快取
     return df
 
 
 def load_cholera() -> pd.DataFrame:
     """坦尚尼亞年霍亂病例 (已去趨勢)。欄位 year, detrended_cholera_cases。"""
-    return pd.read_csv(DATA_DIR / "tanzania_cholera_detrended.csv")
+    return pd.read_csv(EXAMPLES_DIR / "tanzania_cholera_detrended.csv")
 
 
 # ---------------------------------------------------------------------------
