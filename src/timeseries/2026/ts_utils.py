@@ -123,10 +123,21 @@ def to_anomaly(series: pd.Series, clim: pd.Series | None = None,
 # ---------------------------------------------------------------------------
 # 4. 教學用模擬訊號 (有已知的趨勢 + 季節 + 噪音，方便驗證 STL 拆得對不對)
 # ---------------------------------------------------------------------------
-def fetch_mhw_data(lon0, lat0, lon1, lat1, start, end, timeout=40) -> pd.DataFrame:
-    """直接打 ODB MHW API，回傳逐格點 DataFrame。API 手冊見 ODB_MHW_API。"""
-    params = dict(lon0=lon0, lat0=lat0, lon1=lon1, lat1=lat1,
-                  start=start, end=end, append="sst,sst_anomaly,level")
+def fetch_mhw_data(lon0, lat0, lon1=None, lat1=None, start=None, end=None,
+                   timeout=40) -> pd.DataFrame:
+    """
+    直接打 ODB MHW API，回傳逐格點 DataFrame。API 手冊見 ODB_MHW_API。
+
+    - 給 lon1/lat1 → 範圍 (bbox) 查詢，但有時間長度上限。
+    - 不給 lon1/lat1 → 「單點」查詢，只回傳該座標所落入的那一個 0.25° 格點，
+      且無時間長度限制（可一次抓完 1982 至今）。
+    """
+    params = dict(lon0=lon0, lat0=lat0, start=start, end=end,
+                  append="sst,sst_anomaly,level")
+    if lon1 is not None:
+        params["lon1"] = lon1
+    if lat1 is not None:
+        params["lat1"] = lat1
     resp = requests.get(ODB_MHW_API, params=params, timeout=timeout)
     resp.raise_for_status()
     return pd.DataFrame(resp.json())
@@ -165,9 +176,53 @@ def load_cholera() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 CWA_SITES = {"Longdong": (25.0969, 121.9222)}  # (lat, lon)
 
+
+def oisst_monthly_climatology(site="Longdong", base=("1982", "2011"),
+                              timeout=120, update_cache=False) -> pd.Series:
+    """
+    浮標所在 OISST 格點的「12 個月長期平均海溫」(月氣候平均)。線上優先、失敗用快取。
+    回傳 index=月份(1..12) 的 Series，可直接餵給 to_anomaly()。
+
+    ⚠️ 一定要用浮標的「實際經緯度」查詢，不要先四捨五入。
+    OISST 是 0.25° 網格、格心在 .125/.375/.625/.875，122.0 剛好落在兩格交界：
+      - 121.875 這格涵蓋 121.75–122.0  ← 龍洞浮標 (121.9222°E) 真正所在
+      - 122.125 這格涵蓋 122.00–122.25
+    用 lon0=122 查詢會被歸到「東邊那格」(122.125)，月氣候平均最多差到 0.53°C。
+    舊檔 data/examples/oisst_sst_month_mean_1982-2011.txt 的註解雖寫「(25, 122)」，
+    但實際存的是正確的 121.875 這格 (已用 API 驗證吻合到 1e-6)。
+    """
+    cache = EXAMPLES_DIR / "oisst_sst_month_mean_1982-2011.txt"
+    lat, lon = CWA_SITES[site]                      # 用實際座標，不要先取整
+    try:
+        df = fetch_mhw_data(lon, lat, start=f"{base[0]}-01-01", end=f"{base[1]}-12-31",
+                            timeout=timeout)        # 不給 lon1/lat1 → 單點、無時間上限
+        df["date"] = pd.to_datetime(df["date"])
+        sst = df.set_index("date")["sst"]
+        clim = monthly_climatology(sst, base=base)
+    except Exception as exc:  # noqa: BLE001
+        warnings.warn(f"ODB API 抓取失敗 ({exc})，改用本機快取 {cache.name}")
+        clim = pd.Series(np.loadtxt(cache), index=range(1, 13))
+    else:
+        if update_cache:                            # 預設不動：這是已驗證過的課堂靜態檔
+            _save_cache(clim.to_frame("sst"), cache.with_suffix(".csv"))
+    return clim.rename("sst_clim")
+
 # 物理常數 (Huang et al. 2021, https://www.mdpi.com/2072-4292/13/2/170)
 _RHO_AIR = 1.22     # 空氣密度 kg/m^3
 _RHO_W = 1026.0     # 海水密度 kg/m^3
+
+
+def to_daily(series: pd.Series, min_hours=12) -> pd.Series:
+    """
+    時頻序列 → 日平均。當日有效值不足 min_hours 小時就整天捨棄。
+
+    為什麼要「數點數」而不是先做滑動平均？
+    滑動平均雖然也能擋掉稀疏日，但它同時把訊號抹平：`rolling(48).resample("D")`
+    的等效濾波其實跨 3 天 (48h 方波 ⊛ 24h 方波 = 72h 梯形)，會削掉湧升事件的尖峰、
+    並讓後面互相關的峰變鈍。直接檢查每日點數，目的單純、也不動到訊號本身。
+    """
+    agg = series.resample("D").agg(["mean", "count"])
+    return agg.loc[agg["count"] >= min_hours, "mean"].rename(series.name)
 
 
 def load_buoy(site="Longdong") -> pd.DataFrame:
@@ -204,6 +259,26 @@ def upwelling_index(df, site="Longdong", coast_angle=18.0) -> pd.Series:
     tau = _RHO_AIR * _drag_coef(V) * V ** 2 * cos_ab    # 風應力沿岸分量
     f = 2 * 7.2921e-5 * np.sin(np.deg2rad(lat))         # 科氏參數
     return tau / (_RHO_W * f)
+
+
+def r_critical(n, alpha=0.05):
+    """
+    相關係數的「顯著門檻」：樣本數 n 時，|r| 要多大才在 alpha 水準顯著（雙尾）。
+    畫成水平帶後，帶內 = 跟 0 分不出來。比 bootstrap 簡單，資料量夠時解析解就夠用。
+    """
+    from scipy.stats import t as tdist
+    tc = tdist.ppf(1 - alpha / 2, df=n - 2)
+    return tc / np.sqrt(n - 2 + tc ** 2)
+
+
+def n_effective(x: pd.Series, y: pd.Series) -> float:
+    """
+    有效樣本數 (Chelton 1983)。時間序列的相鄰點彼此相關，所以 N 個資料點
+    其實不等於 N 個「獨立」樣本；兩序列的 lag-1 自相關越高，有效樣本越少。
+    直接用 len() 去查表會**高估顯著性**。
+    """
+    a, b = x.autocorr(1), y.autocorr(1)
+    return len(x) * (1 - a * b) / (1 + a * b)
 
 
 def lagged_xcorr(x: pd.Series, y: pd.Series, max_lag=20):
